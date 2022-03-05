@@ -876,7 +876,6 @@ class TestVMLifeCycle(cloudstackTestCase):
 
         self.assertEqual(Volume.list(self.apiclient, id=vol1.id), None, "List response contains records when it should not")
 
-
 class TestSecuredVmMigration(cloudstackTestCase):
 
     @classmethod
@@ -1226,7 +1225,7 @@ class TestMigrateVMwithVolume(cloudstackTestCase):
 
     def get_target_host(self, virtualmachineid):
         target_hosts = Host.listForMigration(self.apiclient,
-                                             virtualmachineid=virtualmachineid)[0]
+                                             virtualmachineid=virtualmachineid)
         if len(target_hosts) < 1:
             self.skipTest("No target hosts found")
 
@@ -1252,7 +1251,8 @@ class TestMigrateVMwithVolume(cloudstackTestCase):
             serviceofferingid=self.small_offering.id,
             mode=self.services["mode"])
 
-    def migrate_vm_with_pools(self, target_pool, id):
+    def migrate_vm_to_pool(self, target_pool, id):
+
         cmd = migrateVirtualMachine.migrateVirtualMachineCmd()
 
         cmd.storageid = target_pool.id
@@ -1273,17 +1273,17 @@ class TestMigrateVMwithVolume(cloudstackTestCase):
         )
 
     """
-    BVT for Vmware Offline VM and Volume Migration
+    BVT for Vmware Offline and Live VM and Volume Migration
     """
 
     @attr(tags=["devcloud", "advanced", "advancedns", "smoke", "basic", "sg", "security"], required_hardware="false")
-    def test_01_migrate_VM_and_root_volume(self):
+    def test_01_offline_migrate_VM_and_root_volume(self):
         """Test VM will be migrated with it's root volume"""
         # Validate the following
         # 1. Deploys a VM
-        # 2. Finds suitable host for migration
+        # 2. Stops the VM
         # 3. Finds suitable storage pool for root volume
-        # 4. Migrate the VM to new host and storage pool and assert migration successful
+        # 4. Migrate the VM to new storage pool and assert migration successful
 
         vm = self.deploy_vm()
 
@@ -1293,19 +1293,19 @@ class TestMigrateVMwithVolume(cloudstackTestCase):
 
         vm.stop(self.apiclient)
 
-        self.migrate_vm_with_pools(target_pool, vm.id)
+        self.migrate_vm_to_pool(target_pool, vm.id)
 
         root_volume = self.get_vm_volumes(vm.id)[0]
         self.assertEqual(root_volume.storageid, target_pool.id, "Pool ID was not as expected")
 
     @attr(tags=["devcloud", "advanced", "advancedns", "smoke", "basic", "sg", "security"], required_hardware="false")
-    def test_02_migrate_VM_with_two_data_disks(self):
+    def test_02_offline_migrate_VM_with_two_data_disks(self):
         """Test VM will be migrated with it's root volume"""
         # Validate the following
         # 1. Deploys a VM and attaches 2 data disks
-        # 2. Finds suitable host for migration
+        # 2. Stops the VM
         # 3. Finds suitable storage pool for volumes
-        # 4. Migrate the VM to new host and storage pool and assert migration successful
+        # 4. Migrate the VM to new storage pool and assert migration successful
 
         vm = self.deploy_vm()
 
@@ -1321,7 +1321,7 @@ class TestMigrateVMwithVolume(cloudstackTestCase):
 
         vm.stop(self.apiclient)
 
-        self.migrate_vm_with_pools(target_pool, vm.id)
+        self.migrate_vm_to_pool(target_pool, vm.id)
 
         volume1 = Volume.list(self.apiclient, id=volume1.id)[0]
         volume2 = Volume.list(self.apiclient, id=volume2.id)[0]
@@ -1332,7 +1332,54 @@ class TestMigrateVMwithVolume(cloudstackTestCase):
         self.assertEqual(volume2.storageid, target_pool.id, "Pool ID was not as expected")
 
     @attr(tags=["devcloud", "advanced", "advancedns", "smoke", "basic", "sg", "security"], required_hardware="false")
-    def test_03_migrate_detached_volume(self):
+    def test_03_live_migrate_VM_with_two_data_disks(self):
+        """Test VM will be migrated with it's root volume"""
+        # Validate the following
+        # 1. Deploys a VM and attaches 2 data disks
+        # 2. Finds suitable host for migration
+        # 3. Finds suitable storage pool for volumes
+        # 4. Migrate the VM to new host and storage pool and assert migration successful
+
+        vm = self.deploy_vm()
+
+        root_volume = self.get_vm_volumes(vm.id)[0]
+        volume1 = self.create_volume()
+        volume2 = self.create_volume()
+        vm.attach_volume(self.apiclient, volume1)
+        vm.attach_volume(self.apiclient, volume2)
+
+        target_host = self.get_target_host(vm.id)
+        target_pool = self.get_target_pool(root_volume.id)
+        volume1.target_pool = self.get_target_pool(volume1.id)
+        volume2.target_pool = self.get_target_pool(volume2.id)
+
+        cmd = migrateVirtualMachineWithVolume.migrateVirtualMachineWithVolumeCmd()
+        cmd.migrateto = [{"volume": str(root_volume.id), "pool": str(target_pool.id)},
+                         {"volume": str(volume1.id), "pool": str(volume1.target_pool.id)},
+                         {"volume": str(volume2.id), "pool": str(volume2.target_pool.id)}]
+        cmd.virtualmachineid = vm.id
+        cmd.hostid = target_host.id
+
+        response = self.apiclient.migrateVirtualMachineWithVolume(cmd)
+
+        self.assertEqual(Volume.list(self.apiclient, id=root_volume.id)[0].storageid,
+                         target_pool.id,
+                         "Pool ID not as expected")
+
+        self.assertEqual(Volume.list(self.apiclient, id=volume1.id)[0].storageid,
+                         volume1.target_pool.id,
+                         "Pool ID not as expected")
+
+        self.assertEqual(Volume.list(self.apiclient, id=volume2.id)[0].storageid,
+                         volume2.target_pool.id,
+                         "Pool ID not as expected")
+
+        self.assertEqual(response.hostid,
+                         target_host.id,
+                         "HostID not as expected")
+
+    @attr(tags=["devcloud", "advanced", "advancedns", "smoke", "basic", "sg", "security"], required_hardware="false")
+    def test_04_migrate_detached_volume(self):
         """Test VM will be migrated with it's root volume"""
         # Validate the following
         # 1. Deploys a VM and attaches 1 data disk
@@ -1943,3 +1990,139 @@ class TestVAppsVM(cloudstackTestCase):
             cmd = destroyVirtualMachine.destroyVirtualMachineCmd()
             cmd.id = vm.id
             self.apiclient.destroyVirtualMachine(cmd)
+
+class TestCloneVM(cloudstackTestCase):
+    
+    @classmethod
+    def setUpClass(cls):
+        testClient = super(TestCloneVM, cls).getClsTestClient()
+        cls.apiclient = testClient.getApiClient()
+        cls.services = testClient.getParsedTestDataConfig()
+        cls.hypervisor = testClient.getHypervisorInfo()
+
+        # Get Zone, Domain and templates
+        domain = get_domain(cls.apiclient)
+        cls.zone = get_zone(cls.apiclient, cls.testClient.getZoneForTests())
+        cls.services['mode'] = cls.zone.networktype
+
+        # if local storage is enabled, alter the offerings to use localstorage
+        # this step is needed for devcloud
+        if cls.zone.localstorageenabled == True:
+            cls.services["service_offerings"]["tiny"]["storagetype"] = 'local'
+            cls.services["service_offerings"]["small"]["storagetype"] = 'local'
+            cls.services["service_offerings"]["medium"]["storagetype"] = 'local'
+
+        template = get_suitable_test_template(
+            cls.apiclient,
+            cls.zone.id,
+            cls.services["ostype"],
+            cls.hypervisor
+        )
+        if template == FAILED:
+            assert False, "get_suitable_test_template() failed to return template with description %s" % cls.services["ostype"]
+
+        # Set Zones and disk offerings
+        cls.services["small"]["zoneid"] = cls.zone.id
+        cls.services["small"]["template"] = template.id
+
+        cls.services["iso1"]["zoneid"] = cls.zone.id
+
+        # Create VMs, NAT Rules etc
+        cls.account = Account.create(
+            cls.apiclient,
+            cls.services["account"],
+            domainid=domain.id
+        )
+        cls._cleanup = []
+        cls._cleanup.append(cls.account)
+        cls.small_offering = ServiceOffering.create(
+            cls.apiclient,
+            cls.services["service_offerings"]["small"]
+        )
+        cls._cleanup.append(cls.small_offering)
+
+        cls.medium_offering = ServiceOffering.create(
+            cls.apiclient,
+            cls.services["service_offerings"]["medium"]
+        )
+        cls._cleanup.append(cls.medium_offering)
+        # create small and large virtual machines
+        cls.small_virtual_machine = VirtualMachine.create(
+            cls.apiclient,
+            cls.services["small"],
+            accountid=cls.account.name,
+            domainid=cls.account.domainid,
+            serviceofferingid=cls.small_offering.id,
+            mode=cls.services["mode"]
+        )
+        cls._cleanup.append(cls.small_virtual_machine)
+        cls.medium_virtual_machine = VirtualMachine.create(
+            cls.apiclient,
+            cls.services["small"],
+            accountid=cls.account.name,
+            domainid=cls.account.domainid,
+            serviceofferingid=cls.medium_offering.id,
+            mode=cls.services["mode"]
+        )
+        cls._cleanup.append(cls.medium_virtual_machine)
+        cls.virtual_machine = VirtualMachine.create(
+            cls.apiclient,
+            cls.services["small"],
+            accountid=cls.account.name,
+            domainid=cls.account.domainid,
+            serviceofferingid=cls.small_offering.id,
+            mode=cls.services["mode"]
+        )
+        cls._cleanup.append(cls.virtual_machine)
+
+    @classmethod
+    def tearDownClass(cls):
+        super(TestCloneVM, cls).tearDownClass()
+
+    def setUp(self):
+        self.apiclient = self.testClient.getApiClient()
+        self.dbclient = self.testClient.getDbConnection()
+        self.cleanup = []
+
+    def tearDown(self):
+        try:
+            cleanup_resources(self.apiclient, self.cleanup)
+        except Exception as e:
+            raise Exception("Warning: Exception during cleanup : %s" % e)
+
+    @attr(tags = ["clone","devcloud", "advanced", "smoke", "basic", "sg"], required_hardware="false")
+    def test_clone_vm_and_volumes(self):
+        small_disk_offering = DiskOffering.list(self.apiclient, name='Small')[0];
+        config = Configurations.list(self.apiclient,
+                              name="kvm.snapshot.enabled"
+                              )
+        if config is None:
+            self.skipTest("Please enable kvm.snapshot.enable global config")
+        if len(config) == 0 or config[0].value != "true":
+            self.skipTest("Please enable kvm.snapshot.enable global config")
+        if self.hypervisor.lower() in ["kvm", "simulator"]:
+            small_virtual_machine = VirtualMachine.create(
+                self.apiclient,
+                self.services["small"],
+                accountid=self.account.name,
+                domainid=self.account.domainid,
+                serviceofferingid=self.small_offering.id,)
+            self.cleanup.append(small_virtual_machine)
+            vol1 = Volume.create(
+                self.apiclient,
+                self.services,
+                account=self.account.name,
+                diskofferingid=small_disk_offering.id,
+                domainid=self.account.domainid,
+                zoneid=self.zone.id
+            )
+            self.cleanup.append(vol1)
+            small_virtual_machine.attach_volume(self.apiclient, vol1)
+            self.debug("Clone VM - ID: %s" % small_virtual_machine.id)
+            try:
+                clone_response = small_virtual_machine.clone(self.apiclient, small_virtual_machine)
+                self.cleanup.append(clone_response)
+            except Exception as e:
+                self.debug("Clone --" + str(e))
+                raise e
+            self.assertTrue(VirtualMachine.list(self.apiclient, id=clone_response.id) is not None, "vm id should be populated")

@@ -635,6 +635,9 @@ class VirtualMachine:
         if rootdiskcontroller:
             cmd.details[0]["rootDiskController"] = rootdiskcontroller
 
+        if "size" in services:
+            cmd.size = services["size"]
+
         if group:
             cmd.group = group
 
@@ -743,6 +746,21 @@ class VirtualMachine:
         response = self.getState(apiclient, VirtualMachine.RUNNING)
         if response[0] == FAIL:
             raise Exception(response[1])
+
+    def clone(self, apiclient, vm):
+        """"Clone the instance"""
+        cmd = cloneVirtualMachine.cloneVirtualMachineCmd()
+        cmd.virtualmachineid = vm.id
+        if vm.id is None:
+            cmd.virtualmachineid = self.id
+        response = apiclient.cloneVirtualMachine(cmd)
+        temp = self.id
+        self.id = response.id
+        state = self.getState(apiclient, VirtualMachine.RUNNING)
+        self.id = temp
+        if (state[0] == FAIL):
+            raise Exception(state[1])
+        return response
 
     def recover(self, apiclient):
         """Recover the instance"""
@@ -2295,6 +2313,9 @@ class ServiceOffering:
 
         if "offerha" in services:
             cmd.offerha = services["offerha"]
+
+        if "provisioningtype" in services:
+            cmd.provisioningtype = services["provisioningtype"]
 
         if "dynamicscalingenabled" in services:
             cmd.dynamicscalingenabled = services["dynamicscalingenabled"]
