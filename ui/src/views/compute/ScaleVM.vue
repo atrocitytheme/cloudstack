@@ -16,12 +16,16 @@
 // under the License.
 
 <template>
-  <a-form class="form">
+  <a-form class="form" v-ctrl-enter="handleSubmit">
     <p v-html="getMessage()"></p>
 
     <div v-if="loading" class="loading">
       <a-icon type="loading" style="color: #1890ff;"></a-icon>
     </div>
+
+    <a-alert v-if="fixedOfferingKvm" style="margin-bottom: 5px" type="error" show-icon>
+      <span slot="message" v-html="$t('message.error.fixed.offering.kvm')" />
+    </a-alert>
 
     <compute-offering-selection
       :compute-items="offerings"
@@ -32,23 +36,44 @@
       @handle-search-filter="($event) => fetchData($event)" />
 
     <compute-selection
-      v-if="selectedOffering && selectedOffering.iscustomized"
-      :cpunumber-input-decorator="cpuNumberKey"
-      :cpuspeed-input-decorator="cpuSpeedKey"
+      v-if="selectedOffering && (selectedOffering.iscustomized || selectedOffering.iscustomizediops)"
+      :cpu-number-input-decorator="cpuNumberKey"
+      :cpu-speed-input-decorator="cpuSpeedKey"
       :memory-input-decorator="memoryKey"
       :computeOfferingId="selectedOffering.id"
       :isConstrained="'serviceofferingdetails' in selectedOffering"
       :minCpu="getMinCpu()"
       :maxCpu="'serviceofferingdetails' in selectedOffering ? selectedOffering.serviceofferingdetails.maxcpunumber*1 : Number.MAX_SAFE_INTEGER"
+      :cpuSpeed="getCPUSpeed()"
       :minMemory="getMinMemory()"
       :maxMemory="'serviceofferingdetails' in selectedOffering ? selectedOffering.serviceofferingdetails.maxmemory*1 : Number.MAX_SAFE_INTEGER"
+      :isCustomized="selectedOffering.iscustomized"
+      :isCustomizedIOps="'iscustomizediops' in selectedOffering && selectedOffering.iscustomizediops"
       @update-compute-cpunumber="updateFieldValue"
       @update-compute-cpuspeed="updateFieldValue"
       @update-compute-memory="updateFieldValue" />
 
+    <disk-size-selection
+      v-if="selectedDiskOffering && (selectedDiskOffering.iscustomized || selectedDiskOffering.iscustomizediops)"
+      :inputDecorator="rootDiskSizeKey"
+      :minDiskSize="minDiskSize"
+      :rootDiskSelected="selectedDiskOffering"
+      :isCustomized="selectedDiskOffering.iscustomized"
+      @handler-error="handlerError"
+      @update-disk-size="updateFieldValue"
+      @update-root-disk-iops-value="updateIOPSValue"/>
+
+    <a-form-item :label="$t('label.automigrate.volume')">
+      <tooltip-label slot="label" :title="$t('label.automigrate.volume')" :tooltip="apiParams.automigrate.description"/>
+      <a-switch
+        v-decorator="['autoMigrate']"
+        :checked="autoMigrate"
+        @change="val => { autoMigrate = val }"/>
+    </a-form-item>
+
     <div :span="24" class="action-button">
       <a-button @click="closeAction">{{ this.$t('label.cancel') }}</a-button>
-      <a-button :loading="loading" type="primary" @click="handleSubmit">{{ this.$t('label.ok') }}</a-button>
+      <a-button :loading="loading" ref="submit" type="primary" @click="handleSubmit">{{ this.$t('label.ok') }}</a-button>
     </div>
   </a-form>
 </template>
@@ -57,12 +82,14 @@
 import { api } from '@/api'
 import ComputeOfferingSelection from '@views/compute/wizard/ComputeOfferingSelection'
 import ComputeSelection from '@views/compute/wizard/ComputeSelection'
+import DiskSizeSelection from '@views/compute/wizard/DiskSizeSelection'
 
 export default {
   name: 'ScaleVM',
   components: {
     ComputeOfferingSelection,
-    ComputeSelection
+    ComputeSelection,
+    DiskSizeSelection
   },
   props: {
     resource: {
@@ -76,13 +103,24 @@ export default {
       offeringsMap: {},
       offerings: [],
       selectedOffering: {},
+      selectedDiskOffering: {},
+      autoMigrate: true,
       total: 0,
       params: { id: this.resource.id },
       loading: false,
       cpuNumberKey: 'details[0].cpuNumber',
       cpuSpeedKey: 'details[0].cpuSpeed',
-      memoryKey: 'details[0].memory'
+      memoryKey: 'details[0].memory',
+      rootDiskSizeKey: 'details[0].rootdisksize',
+      minIopsKey: 'details[0].minIops',
+      maxIopsKey: 'details[0].maxIops',
+      fixedOfferingKvm: false,
+      minDiskSize: 0
     }
+  },
+  beforeCreate () {
+    this.form = this.$form.createForm(this)
+    this.apiParams = this.$getApiParams('scaleVirtualMachine')
   },
   created () {
     this.fetchData({
@@ -110,6 +148,13 @@ export default {
           return
         }
         this.offerings = response.listserviceofferingsresponse.serviceoffering
+        if (this.resource.state === 'Running' && this.resource.hypervisor === 'KVM') {
+          this.offerings = this.offerings.filter(offering => offering.id === this.resource.serviceofferingid)
+          this.currentOffer = this.offerings[0]
+          if (this.currentOffer === undefined) {
+            this.fixedOfferingKvm = true
+          }
+        }
         this.offerings.map(i => { this.offeringsMap[i.id] = i })
       }).finally(() => {
         this.loading = false
@@ -120,20 +165,50 @@ export default {
       if (this.resource.state === 'Running') {
         return this.resource.cpunumber
       }
-      return 'serviceofferingdetails' in this.selectedOffering ? this.selectedOffering.serviceofferingdetails.mincpunumber * 1 : 1
+      return this.selectedOffering?.serviceofferingdetails?.mincpunumber * 1 || 1
     },
     getMinMemory () {
       // We can only scale up while a VM is running
       if (this.resource.state === 'Running') {
         return this.resource.memory
       }
-      return 'serviceofferingdetails' in this.selectedOffering ? this.selectedOffering.serviceofferingdetails.minmemory * 1 : 32
+      return this.selectedOffering?.serviceofferingdetails?.minmemory * 1 || 32
+    },
+    getCPUSpeed () {
+      // We can only scale up while a VM is running
+      if (this.resource.state === 'Running') {
+        return this.resource.cpuspeed
+      }
+      this.getMinDiskSize()
+      return this.selectedOffering?.serviceofferingdetails?.cpuspeed * 1 || 1
+    },
+    getTemplate () {
+      return new Promise((resolve, reject) => {
+        api('listTemplates', {
+          templatefilter: 'all',
+          id: this.resource.templateid
+        }).then(response => {
+          var template = response?.listtemplatesresponse?.template?.[0] || null
+          resolve(template)
+        }).catch(error => {
+          reject(error)
+        })
+      })
+    },
+    async getMinDiskSize () {
+      const template = await this.getTemplate()
+      this.minDiskSize = Math.ceil(template?.size / (1024 * 1024 * 1024) || 0)
     },
     getMessage () {
       if (this.resource.hypervisor === 'VMware') {
         return this.$t('message.read.admin.guide.scaling.up')
       }
       return this.$t('message.change.offering.confirm')
+    },
+    updateIOPSValue (input, value) {
+      console.log(input)
+      const key = input === 'minIops' ? this.minIopsKey : this.maxIopsKey
+      this.params[key] = value
     },
     updateComputeOffering (id) {
       // Delete custom details
@@ -143,6 +218,17 @@ export default {
 
       this.params.serviceofferingid = id
       this.selectedOffering = this.offeringsMap[id]
+      api('listDiskOfferings', {
+        id: this.selectedOffering.diskofferingid
+      }).then(response => {
+        const diskOfferings = response.listdiskofferingsresponse.diskoffering || []
+        if (this.offerings) {
+          this.selectedDiskOffering = diskOfferings[0]
+        }
+      }).catch(error => {
+        this.$notifyError(error)
+      })
+      this.params.automigrate = this.autoMigrate
     },
     updateFieldValue (name, value) {
       this.params[name] = value
@@ -150,7 +236,11 @@ export default {
     closeAction () {
       this.$emit('close-action')
     },
+    handlerError (error) {
+      this.error = error
+    },
     handleSubmit () {
+      if (this.loading) return
       this.loading = true
 
       if ('cpuspeed' in this.selectedOffering && this.selectedOffering.iscustomized) {
@@ -189,15 +279,6 @@ export default {
   width: 90vw;
   @media (min-width: 700px) {
     width: 50vw;
-  }
-}
-
-.action-button {
-  margin-top: 10px;
-  text-align: right;
-
-  button {
-    margin-right: 5px;
   }
 }
 </style>

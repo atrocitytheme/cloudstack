@@ -21,7 +21,11 @@
       class="form-layout"
       layout="vertical"
       :form="form"
+      v-ctrl-enter="handleSubmit"
       @submit="handleSubmit">
+      <a-alert style="margin-bottom: 5px" type="warning" show-icon>
+        <span slot="message" v-html="$t('message.restart.vm.to.update.settings')" />
+      </a-alert>
       <a-form-item>
         <tooltip-label slot="label" :title="$t('label.name')" :tooltip="apiParams.name.description"/>
         <a-input
@@ -55,7 +59,7 @@
           v-decorator="['isdynamicallyscalable']"
           :disabled="!canDynamicScalingEnabled()" />
       </a-form-item>
-      <a-form-item>
+      <a-form-item v-if="serviceOffering ? serviceOffering.offerha : false">
         <tooltip-label slot="label" :title="$t('label.haenable')" :tooltip="apiParams.haenable.description"/>
         <a-switch
           :default-checked="resource.haenable"
@@ -73,7 +77,7 @@
 
       <div :span="24" class="action-button">
         <a-button :loading="loading" @click="onCloseAction">{{ this.$t('label.cancel') }}</a-button>
-        <a-button :loading="loading" type="primary" @click="handleSubmit">{{ this.$t('label.ok') }}</a-button>
+        <a-button :loading="loading" ref="submit" type="primary" @click="handleSubmit">{{ this.$t('label.ok') }}</a-button>
       </div>
     </a-form>
   </a-spin>
@@ -176,11 +180,16 @@ export default {
     fetchInstaceGroups () {
       this.groups.loading = true
       this.groups.opts = []
-      api('listInstanceGroups', {
-        account: this.$store.getters.userInfo.account,
+      const params = {
         domainid: this.$store.getters.userInfo.domainid,
         listall: true
-      }).then(json => {
+      }
+      if (this.$store.getters.project && this.$store.getters.project.id) {
+        params.projectid = this.$store.getters.project.id
+      } else {
+        params.account = this.$store.getters.userInfo.account
+      }
+      api('listInstanceGroups', params).then(json => {
         const groups = json.listinstancegroupsresponse.instancegroup || []
         groups.forEach(x => {
           this.groups.opts.push(x.name)
@@ -191,7 +200,7 @@ export default {
     },
     handleSubmit (e) {
       e.preventDefault()
-      this.form.validateFields((err, values) => {
+      this.form.validateFieldsAndScroll((err, values) => {
         if (err) return
 
         const params = {}
@@ -199,10 +208,13 @@ export default {
         params.name = values.name
         params.displayname = values.displayname
         params.ostypeid = values.ostypeid
-        params.isdynamicallyscalable = values.isdynamicallyscalable || false
-        params.haenable = values.haenable || false
+        if (values.isdynamicallyscalable !== undefined) {
+          params.isdynamicallyscalable = values.isdynamicallyscalable
+        }
+        if (values.haenable !== undefined) {
+          params.haenable = values.haenable
+        }
         params.group = values.group
-
         this.loading = true
 
         api('updateVirtualMachine', params).then(json => {

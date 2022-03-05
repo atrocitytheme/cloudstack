@@ -213,7 +213,7 @@ export default {
       const title = this.$t('label.confirmacceptinvitation')
 
       this.$confirm({
-        title: title,
+        title,
         okText: this.$t('label.ok'),
         okType: 'danger',
         cancelText: this.$t('label.cancel'),
@@ -262,7 +262,7 @@ export default {
       const title = this.$t('label.confirmdeclineinvitation')
 
       this.$confirm({
-        title: title,
+        title,
         okText: this.$t('label.ok'),
         okType: 'danger',
         cancelText: this.$t('label.cancel'),
@@ -295,11 +295,11 @@ export default {
             if (res === 'jobid') {
               hasJobId = true
               const jobId = json[obj][res]
-              this.$store.dispatch('AddAsyncJob', {
-                title: title,
-                jobid: jobId,
-                description: description,
-                status: 'progress'
+              this.$pollJob({
+                title,
+                jobId,
+                description,
+                showLoading: false
               })
             }
           }

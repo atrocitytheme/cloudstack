@@ -24,6 +24,7 @@ import java.util.Map;
 import com.cloud.exception.StorageUnavailableException;
 import org.apache.cloudstack.api.command.user.vm.CloneVMCmd;
 import org.apache.cloudstack.api.command.user.volume.AttachVolumeCmd;
+import org.apache.cloudstack.api.command.user.volume.ChangeOfferingForVolumeCmd;
 import org.apache.cloudstack.api.command.user.volume.CreateVolumeCmd;
 import org.apache.cloudstack.api.command.user.volume.DetachVolumeCmd;
 import org.apache.cloudstack.api.command.user.volume.ExtractVolumeCmd;
@@ -103,7 +104,7 @@ public interface VolumeApiService {
 
     Snapshot allocSnapshot(Long volumeId, Long policyId, String snapshotName, Snapshot.LocationType locationType) throws ResourceAllocationException;
 
-    Volume updateVolume(long volumeId, String path, String state, Long storageId, Boolean displayVolume, String customId, long owner, String chainInfo);
+    Volume updateVolume(long volumeId, String path, String state, Long storageId, Boolean displayVolume, String customId, long owner, String chainInfo, String name);
 
     Volume attachVolumeToVm(CloneVMCmd cmd, Long volumeId, Long deviceId);
 
@@ -158,4 +159,8 @@ public interface VolumeApiService {
     Volume destroyVolume(long volumeId, Account caller, boolean expunge, boolean forceExpunge);
 
     Volume recoverVolume(long volumeId);
+
+    boolean validateVolumeSizeInBytes(long size);
+
+    Volume changeDiskOfferingForVolume(ChangeOfferingForVolumeCmd cmd) throws ResourceAllocationException;
 }

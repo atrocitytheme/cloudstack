@@ -17,7 +17,7 @@
 
 <template>
   <a-spin :spinning="loading">
-    <div class="form-layout">
+    <div class="form-layout" v-ctrl-enter="handleSubmit">
       <div class="form">
         <a-form
           :form="form"
@@ -54,17 +54,21 @@
               showSearch
               optionFilterProp="children"
               :filterOption="(input, option) => {
-                return option.componentOptions.children[0].text.toLowerCase().indexOf(input.toLowerCase()) >= 0
+                return option.componentOptions.propsData.label.toLowerCase().indexOf(input.toLowerCase()) >= 0
               }"
               :loading="zoneLoading"
               :placeholder="this.$t('label.zoneid')"
               @change="val => { this.handleZoneChange(this.zones[val]) }">
-              <a-select-option v-for="(opt, optIndex) in this.zones" :key="optIndex">
-                {{ opt.name || opt.description }}
+              <a-select-option v-for="(opt, optIndex) in this.zones" :key="optIndex" :label="opt.name || opt.description">
+                <span>
+                  <resource-icon v-if="opt.icon" :image="opt.icon.base64image" size="1x" style="margin-right: 5px"/>
+                  <a-icon v-else type="global" style="margin-right: 5px" />
+                  {{ opt.name || opt.description }}
+                </span>
               </a-select-option>
             </a-select>
           </a-form-item>
-          <a-form-item v-if="this.isAdminOrDomainAdmin()">
+          <a-form-item v-if="isAdminOrDomainAdmin()">
             <tooltip-label slot="label" :title="$t('label.domainid')" :tooltip="apiParams.domainid.description"/>
             <a-select
               v-decorator="['domainid', {}]"
@@ -175,6 +179,7 @@
             </a-button>
             <a-button
               :loading="actionLoading"
+              ref="submit"
               type="primary"
               @click="handleSubmit">
               {{ this.$t('label.ok') }}
@@ -188,12 +193,15 @@
 
 <script>
 import { api } from '@/api'
+import { isAdmin, isAdminOrDomainAdmin } from '@/role'
+import ResourceIcon from '@/components/view/ResourceIcon'
 import TooltipLabel from '@/components/widgets/TooltipLabel'
 
 export default {
   name: 'CreateIsolatedNetworkForm',
   components: {
-    TooltipLabel
+    TooltipLabel,
+    ResourceIcon
   },
   props: {
     loading: {
@@ -224,7 +232,7 @@ export default {
       vpcs: [],
       vpcLoading: false,
       selectedVpc: {},
-      accountVisible: this.isAdminOrDomainAdmin()
+      accountVisible: isAdminOrDomainAdmin()
     }
   },
   watch: {
@@ -250,11 +258,8 @@ export default {
       this.fetchDomainData()
       this.fetchZoneData()
     },
-    isAdmin () {
-      return ['Admin'].includes(this.$store.getters.userInfo.roletype)
-    },
     isAdminOrDomainAdmin () {
-      return ['Admin', 'DomainAdmin'].includes(this.$store.getters.userInfo.roletype)
+      return isAdminOrDomainAdmin()
     },
     isObjectEmpty (obj) {
       return !(obj !== null && obj !== undefined && Object.keys(obj).length > 0 && obj.constructor === Object)
@@ -263,7 +268,7 @@ export default {
       return array !== null && array !== undefined && Array.isArray(array) && array.length > 0
     },
     isValidTextValueForKey (obj, key) {
-      return key in obj && obj[key] != null && obj[key].length > 0
+      return key in obj && obj[key] != null && String(obj[key]).length > 0
     },
     fetchZoneData () {
       this.zones = []
@@ -272,6 +277,7 @@ export default {
         params.id = this.resource.zoneid
       }
       params.listAll = true
+      params.showicon = true
       this.zoneLoading = true
       api('listZones', params).then(json => {
         for (const i in json.listzonesresponse.zone) {
@@ -312,7 +318,7 @@ export default {
     handleDomainChange (domain) {
       this.selectedDomain = domain
       this.accountVisible = domain.id !== '-1'
-      if (this.isAdminOrDomainAdmin()) {
+      if (isAdminOrDomainAdmin()) {
         this.updateVPCCheckAndFetchNetworkOfferingData()
       }
     },
@@ -338,13 +344,12 @@ export default {
       var params = {
         zoneid: this.selectedZone.id,
         guestiptype: 'Isolated',
-        supportedServices: 'SourceNat',
         state: 'Enabled'
       }
-      if (this.isAdminOrDomainAdmin() && this.selectedDomain.id !== '-1') { // domain is visible only for admins
+      if (isAdminOrDomainAdmin() && this.selectedDomain.id !== '-1') { // domain is visible only for admins
         params.domainid = this.selectedDomain.id
       }
-      if (!this.isAdmin()) { // normal user is not aware of the VLANs in the system, so normal user is not allowed to create network with network offerings whose specifyvlan = true
+      if (!isAdmin()) { // normal user is not aware of the VLANs in the system, so normal user is not allowed to create network with network offerings whose specifyvlan = true
         params.specifyvlan = false
       }
       if (forVpc !== null) {
@@ -394,7 +399,13 @@ export default {
       })
     },
     handleSubmit (e) {
-      this.form.validateFields((error, values) => {
+      if (this.actionLoading) return
+      const options = {
+        scroll: {
+          offsetTop: 10
+        }
+      }
+      this.form.validateFieldsAndScroll(options, (error, values) => {
         if (error) {
           return
         }
@@ -482,15 +493,6 @@ export default {
 
 .tagsTitle {
   font-weight: 500;
-  color: rgba(0, 0, 0, 0.85);
   margin-bottom: 12px;
-}
-
-.action-button {
-  text-align: right;
-
-  button {
-    margin-right: 5px;
-  }
 }
 </style>
