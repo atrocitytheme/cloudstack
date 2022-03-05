@@ -16,7 +16,7 @@
 // under the License.
 
 <template>
-  <a-card>
+  <a-card v-if="isCustomized">
     <a-col>
       <a-row>
         <a-col :md="colContraned" :lg="colContraned" v-if="isCustomized">
@@ -25,7 +25,7 @@
             :validate-status="errors.cpu.status"
             :help="errors.cpu.message">
             <a-row :gutter="12">
-              <a-col :md="10" :lg="10" v-show="isConstrained">
+              <a-col :md="10" :lg="10" v-show="isConstrained && maxCpu && !isNaN(maxCpu)">
                 <a-slider
                   :min="minCpu"
                   :max="maxCpu"
@@ -61,7 +61,7 @@
             :validate-status="errors.memory.status"
             :help="errors.memory.message">
             <a-row :gutter="12">
-              <a-col :md="10" :lg="10" v-show="isConstrained">
+              <a-col :md="10" :lg="10" v-show="isConstrained && maxMemory && !isNaN(maxMemory)">
                 <a-slider
                   :min="minMemory"
                   :max="maxMemory"
@@ -107,6 +107,10 @@ export default {
       type: Boolean,
       default: true
     },
+    cpuSpeed: {
+      type: Number,
+      default: 0
+    },
     minCpu: {
       type: Number,
       default: 0
@@ -123,11 +127,11 @@ export default {
       type: Number,
       default: 256
     },
-    cpunumberInputDecorator: {
+    cpuNumberInputDecorator: {
       type: String,
       default: ''
     },
-    cpuspeedInputDecorator: {
+    cpuSpeedInputDecorator: {
       type: String,
       default: ''
     },
@@ -175,7 +179,11 @@ export default {
   },
   computed: {
     colContraned () {
-      return this.isConstrained ? 12 : 8
+      if (this.isConstrained && this.maxCpu && !isNaN(this.maxCpu)) {
+        return 12
+      }
+
+      return 8
     }
   },
   watch: {
@@ -194,6 +202,7 @@ export default {
     fillValue () {
       this.cpuNumberInputValue = this.minCpu
       this.memoryInputValue = this.minMemory
+      this.cpuSpeedInputValue = this.cpuSpeed
 
       if (!this.preFillContent) {
         this.updateComputeCpuNumber(this.cpuNumberInputValue)
@@ -219,10 +228,10 @@ export default {
       if (!this.validateInput('cpu', value)) {
         return
       }
-      this.$emit('update-compute-cpunumber', this.cpunumberInputDecorator, value)
+      this.$emit('update-compute-cpunumber', this.cpuNumberInputDecorator, value)
     },
     updateComputeCpuSpeed (value) {
-      this.$emit('update-compute-cpuspeed', this.cpuspeedInputDecorator, value)
+      this.$emit('update-compute-cpuspeed', this.cpuSpeedInputDecorator, value)
     },
     updateComputeMemory (value) {
       if (!value) this.memoryInputValue = 0
@@ -298,8 +307,8 @@ export default {
         this.$emit('handler-error', true)
         return
       }
-      this.$emit('update-iops-value', 'minIOPs', this.minIOps)
-      this.$emit('update-iops-value', 'maxIOPs', this.maxIOps)
+      this.$emit('update-iops-value', 'minIops', this.minIOps)
+      this.$emit('update-iops-value', 'maxIops', this.maxIOps)
       this.$emit('handler-error', false)
     }
   }

@@ -16,7 +16,7 @@
 // under the License.
 <template>
   <div>
-    <a-form class="form-layout" :form="form" layout="vertical">
+    <a-form class="form-layout" :form="form" layout="vertical" v-ctrl-enter="handleSubmit">
       <a-form-item>
         <tooltip-label slot="label" :title="$t('label.name')" :tooltip="apiParams.name.description"/>
         <a-input
@@ -69,7 +69,12 @@
             {
               initialValue: 'aes128',
             },
-          ]">
+          ]"
+          showSearch
+          optionFilterProp="children"
+          :filterOption="(input, option) => {
+            return option.componentOptions.children[0].text.toLowerCase().indexOf(input.toLowerCase()) >= 0
+          }" >
           <a-select-option :value="algo" v-for="(algo, idx) in encryptionAlgo" :key="idx">
             {{ algo }}
           </a-select-option>
@@ -82,7 +87,12 @@
             {
               initialValue: 'sha1',
             },
-          ]">
+          ]"
+          showSearch
+          optionFilterProp="children"
+          :filterOption="(input, option) => {
+            return option.componentOptions.children[0].text.toLowerCase().indexOf(input.toLowerCase()) >= 0
+          }" >
           <a-select-option :value="h" v-for="(h, idx) in hash" :key="idx">
             {{ h }}
           </a-select-option>
@@ -97,7 +107,12 @@
               initialValue: 'ike',
             },
           ]"
-          @change="val => { ikeversion = val }">
+          @change="val => { ikeversion = val }"
+          showSearch
+          optionFilterProp="children"
+          :filterOption="(input, option) => {
+            return option.componentOptions.children[0].text.toLowerCase().indexOf(input.toLowerCase()) >= 0
+          }" >
           <a-select-option :value="vers" v-for="(vers, idx) in ikeVersions" :key="idx">
             {{ vers }}
           </a-select-option>
@@ -111,7 +126,12 @@
             {
               initialValue: 'Group 5(modp1536)',
             },
-          ]">
+          ]"
+          showSearch
+          optionFilterProp="children"
+          :filterOption="(input, option) => {
+            return option.componentOptions.children[0].text.toLowerCase().indexOf(input.toLowerCase()) >= 0
+          }" >
           <a-select-option :value="DHGroups[group]" v-for="(group, idx) in Object.keys(DHGroups)" :key="idx">
             <div v-if="group !== ''">
               {{ group+"("+DHGroups[group]+")" }}
@@ -127,7 +147,12 @@
             {
               initialValue: 'aes128',
             },
-          ]">
+          ]"
+          showSearch
+          optionFilterProp="children"
+          :filterOption="(input, option) => {
+            return option.componentOptions.children[0].text.toLowerCase().indexOf(input.toLowerCase()) >= 0
+          }" >
           <a-select-option :value="algo" v-for="(algo, idx) in encryptionAlgo" :key="idx">
             {{ algo }}
           </a-select-option>
@@ -141,7 +166,12 @@
             {
               initialValue: 'sha1',
             },
-          ]">
+          ]"
+          showSearch
+          optionFilterProp="children"
+          :filterOption="(input, option) => {
+            return option.componentOptions.children[0].text.toLowerCase().indexOf(input.toLowerCase()) >= 0
+          }" >
           <a-select-option :value="h" v-for="(h, idx) in hash" :key="idx">
             {{ h }}
           </a-select-option>
@@ -155,7 +185,12 @@
             {
               initialValue: 'None',
             },
-          ]">
+          ]"
+          showSearch
+          optionFilterProp="children"
+          :filterOption="(input, option) => {
+            return option.componentOptions.children[0].text.toLowerCase().indexOf(input.toLowerCase()) >= 0
+          }" >
           <a-select-option :value="DHGroups[group]" v-for="(group, idx) in Object.keys(DHGroups)" :key="idx">
             <div v-if="group === ''">
               {{ DHGroups[group] }}
@@ -218,7 +253,7 @@
             },
           ]"/>
       </a-form-item>
-      <div class="actions">
+      <div class="action-button">
         <a-button @click="closeModal">
           {{ $t('label.cancel') }}
         </a-button>
@@ -244,7 +279,6 @@ export default {
       required: true
     }
   },
-  inject: ['parentFetchData', 'parentToggleLoading'],
   data () {
     return {
       encryptionAlgo: [
@@ -276,6 +310,7 @@ export default {
         'Group 18': 'modp8192'
       },
       ikeDhGroupInitialValue: 'Group 5(modp1536)',
+      isSubmitted: false,
       ikeversion: 'ike'
     }
   },
@@ -289,10 +324,17 @@ export default {
     },
     handleSubmit (e) {
       e.preventDefault()
-      this.form.validateFields((err, values) => {
+      if (this.isSubmitted) return
+      const options = {
+        scroll: {
+          offsetTop: 10
+        }
+      }
+      this.form.validateFieldsAndScroll(options, (err, values) => {
         if (err) {
           return
         }
+        this.isSubmitted = true
         let ikepolicy = values.ikeEncryption + '-' + values.ikeHash + ';'
         ikepolicy += (values.ikeDh !== this.ikeDhGroupInitialValue) ? values.ikeDh : (values.ikeDh.split('(')[1]).split(')')[0]
         let esppolicy = values.espEncryption + '-' + values.espHash
@@ -313,28 +355,25 @@ export default {
           splitconnections: values.splitconnections,
           ikeversion: values.ikeversion
         }).then(response => {
-          this.$store.dispatch('AddAsyncJob', {
-            title: this.$t('message.add.vpn.customer.gateway'),
-            jobid: response.createvpncustomergatewayresponse.jobid,
-            description: values.name,
-            status: 'progress'
-          })
           this.$pollJob({
             jobId: response.createvpncustomergatewayresponse.jobid,
+            title: this.$t('message.add.vpn.customer.gateway'),
+            description: values.name,
             successMessage: this.$t('message.success.add.vpn.customer.gateway'),
             successMethod: () => {
               this.closeModal()
-              this.parentFetchData()
+              this.isSubmitted = false
             },
             errorMessage: `${this.$t('message.create.vpn.customer.gateway.failed')} ` + response,
             errorMethod: () => {
               this.closeModal()
-              this.parentFetchData()
+              this.isSubmitted = false
             },
             loadingMessage: this.$t('message.add.vpn.customer.gateway.processing'),
             catchMessage: this.$t('error.fetching.async.job.result'),
             catchMethod: () => {
               this.closeModal()
+              this.isSubmitted = false
             }
           })
           this.closeModal()
@@ -342,6 +381,7 @@ export default {
         }).catch(error => {
           console.error(error)
           this.$message.error(this.$t('message.success.add.vpn.customer.gateway'))
+          this.isSubmitted = false
         })
       })
     }
@@ -351,16 +391,5 @@ export default {
 <style lang="scss" scoped>
 .form-layout {
   width: 500px;
-}
-
-.actions {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: 20px;
-  button {
-    &:not(:last-child) {
-      margin-right: 10px;
-    }
-  }
 }
 </style>

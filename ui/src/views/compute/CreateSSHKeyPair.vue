@@ -20,6 +20,7 @@
     <a-spin :spinning="loading" v-if="!isSubmitted">
       <p v-html="$t('message.desc.create.ssh.key.pair')"></p>
       <a-form
+        v-ctrl-enter="handleSubmit"
         :form="form"
         @submit="handleSubmit"
         layout="vertical">
@@ -61,7 +62,7 @@
 
         <div :span="24" class="action-button">
           <a-button @click="closeAction">{{ this.$t('label.cancel') }}</a-button>
-          <a-button :loading="loading" type="primary" @click="handleSubmit">{{ this.$t('label.ok') }}</a-button>
+          <a-button :loading="loading" ref="submit" type="primary" @click="handleSubmit">{{ this.$t('label.ok') }}</a-button>
         </div>
       </a-form>
     </a-spin>
@@ -144,7 +145,8 @@ export default {
     },
     handleSubmit (e) {
       e.preventDefault()
-      this.form.validateFields((err, values) => {
+      if (this.loading) return
+      this.form.validateFieldsAndScroll((err, values) => {
         if (err) {
           return
         }
@@ -174,7 +176,7 @@ export default {
         } else {
           api('createSSHKeyPair', params).then(json => {
             this.$message.success(this.$t('message.success.create.keypair') + ' ' + values.name)
-            if (json.createsshkeypairresponse && json.createsshkeypairresponse.keypair && json.createsshkeypairresponse.keypair.privatekey) {
+            if (json.createsshkeypairresponse?.keypair?.privatekey) {
               this.isSubmitted = true
               const key = json.createsshkeypairresponse.keypair.privatekey
               this.hiddenElement = document.createElement('a')
@@ -213,14 +215,6 @@ export default {
 
     @media (min-width: 600px) {
       width: 450px;
-    }
-  }
-
-  .action-button {
-    text-align: right;
-
-    button {
-      margin-right: 5px;
     }
   }
 </style>

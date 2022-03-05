@@ -17,7 +17,7 @@
 
 <template>
   <a-spin :spinning="loading">
-    <div class="form-layout">
+    <div class="form-layout" v-ctrl-enter="handleSubmit">
       <div class="form">
         <a-form
           :form="form"
@@ -31,7 +31,11 @@
                 initialValue: this.pods && this.pods.length > 0 ? this.pods[0].id : '',
                 rules: [{ required: true, message: `${$t('label.required')}` }]
               }]"
-            >
+              showSearch
+              optionFilterProp="children"
+              :filterOption="(input, option) => {
+                return option.componentOptions.children[0].text.toLowerCase().indexOf(input.toLowerCase()) >= 0
+              }" >
               <a-select-option v-for="pod in pods" :key="pod.id" :value="pod.id">{{ pod.name }}</a-select-option>
             </a-select>
           </a-form-item>
@@ -143,6 +147,7 @@
             <a-button
               :loading="loading"
               type="primary"
+              ref="submit"
               @click="handleSubmit">
               {{ this.$t('label.ok') }}
             </a-button>
@@ -218,7 +223,8 @@ export default {
     handleSubmit (e) {
       e.preventDefault()
 
-      this.form.validateFields((err, values) => {
+      if (this.loading) return
+      this.form.validateFieldsAndScroll((err, values) => {
         if (err) {
           return
         }
@@ -283,14 +289,6 @@ export default {
 
   @media (min-width: 500px) {
     width: 450px;
-  }
-}
-
-.action-button {
-  text-align: right;
-
-  button {
-    margin-right: 5px;
   }
 }
 </style>

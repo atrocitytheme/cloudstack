@@ -1373,7 +1373,8 @@ class TestPersistentNetworks(cloudstackTestCase):
             self.fail(exceptionMessage)
         return
 
-    @attr(tags=["advanced"], required_hardware="true")
+    # @attr(tags=["advanced"], required_hardware="true")
+    @attr(tags=["TODO"], required_hardware="true")
     def test_delete_account(self):
         # steps
         # 1. create persistent network and deploy VM in it
@@ -1783,7 +1784,7 @@ class TestAssignVirtualMachine(cloudstackTestCase):
                 "networks list validation failed, list is %s" %
                 networks)
         except Exception as e:
-            self.fail("Exception occured: %s" % e)
+            self.fail("Exception occurred: %s" % e)
         return
 
 
@@ -2924,7 +2925,8 @@ class TestVPCNetworkOperations(cloudstackTestCase):
         self.VerifyNetworkCleanup(persistent_network_2.id)
         return
 
-    @attr(tags=["advanced"], required_hardware="true")
+    # @attr(tags=["advanced"], required_hardware="true")
+    @attr(tags=["TODO"], required_hardware="true")
     def test_vpc_delete_account(self):
         # steps
         # 1. Create account and create VPC network in the account

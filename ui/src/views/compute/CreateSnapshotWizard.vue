@@ -16,7 +16,7 @@
 // under the License.
 
 <template>
-  <div class="form-layout">
+  <div class="form-layout" v-ctrl-enter="handleSubmit">
     <a-spin :spinning="loading">
       <a-form
         :form="form"
@@ -25,14 +25,18 @@
         <a-form-item>
           <tooltip-label slot="label" :title="$t('label.volumeid')" :tooltip="apiParams.volumeid.description"/>
           <a-select
-            showSearch
             allowClear
             v-decorator="['volumeid', {
               rules: [{ required: true, message: $t('message.error.select') }]
             }]"
             @change="onChangeVolume"
             :placeholder="apiParams.volumeid.description"
-            autoFocus>
+            autoFocus
+            showSearch
+            optionFilterProp="children"
+            :filterOption="(input, option) => {
+              return option.componentOptions.children[0].text.toLowerCase().indexOf(input.toLowerCase()) >= 0
+            }" >
             <a-select-option
               v-for="volume in listVolumes"
               :key="volume.id">
@@ -56,7 +60,7 @@
         </a-form-item>
         <div :span="24" class="action-button">
           <a-button @click="closeAction">{{ $t('label.cancel') }}</a-button>
-          <a-button :loading="loading" type="primary" @click="handleSubmit">{{ $t('label.ok') }}</a-button>
+          <a-button :loading="loading" ref="submit" type="primary" @click="handleSubmit">{{ $t('label.ok') }}</a-button>
         </div>
       </a-form>
     </a-spin>
@@ -107,7 +111,8 @@ export default {
     handleSubmit (e) {
       e.preventDefault()
 
-      this.form.validateFields((err, values) => {
+      if (this.loading) return
+      this.form.validateFieldsAndScroll((err, values) => {
         if (err) return
 
         const params = {}
@@ -130,6 +135,8 @@ export default {
             if (jobId) {
               this.$pollJob({
                 jobId,
+                title,
+                description,
                 successMethod: result => {
                   const volumeId = result.jobresult.snapshot.volumeid
                   const snapshotId = result.jobresult.snapshot.id
@@ -141,12 +148,6 @@ export default {
                 },
                 loadingMessage: `${title} ${this.$t('label.in.progress')}`,
                 catchMessage: this.$t('error.fetching.async.job.result')
-              })
-              this.$store.dispatch('AddAsyncJob', {
-                title: title,
-                jobid: jobId,
-                description: description,
-                status: 'progress'
               })
             }
           }).catch(error => {
@@ -176,12 +177,6 @@ export default {
   width: 80vw;
   @media (min-width: 600px) {
     width: 450px;
-  }
-}
-.action-button {
-  text-align: right;
-  button {
-    margin-right: 5px;
   }
 }
 </style>
